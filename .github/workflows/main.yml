@@ -1,0 +1,47 @@
+name: Deploy RBAC (ocsecurity.yaml)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'ocsecurity.yaml'
+      - '.github/workflows/deploy-ocsecurity.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Install OC CLI
+        run: |
+          curl -L https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar xz
+          sudo mv oc /usr/local/bin/
+          oc version
+
+      - name: Login to OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          namespace: ${{ secrets.OPENSHIFT_NAMESPACE }}
+          # Si tu clúster tiene TLS propio/privado y necesitas saltarte verificación pon esto en true:
+          # insecure_skip_tls_verify: true
+
+      - name: Select project
+        run: oc project ${{ secrets.OPENSHIFT_NAMESPACE }}
+
+      - name: Apply ocsecurity.yaml
+        run: |
+          # Validación rápida del YAML y vista previa
+          oc apply --dry-run=server -f ocsecurity.yaml
+          # Aplicación real
+          oc apply -f ocsecurity.yaml
+
+      - name: Show result
+        run: |
+          echo "ServiceAccount:"
+          oc -n ${{ secrets.OPENSHIFT_NAMESPACE }} get sa cicd-serviceaccount -o yaml || true
+          echo "RoleBinding:"
+          oc -n ${{ secrets.OPENSHIFT_NAMESPACE }} get rolebinding cicd-binding -o yaml || true
